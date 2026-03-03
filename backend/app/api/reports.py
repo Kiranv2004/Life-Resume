@@ -1,9 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
-from sqlalchemy.orm import Session
-
 from app.auth.dependencies import get_current_user
-from app.core.database import get_db
 from app.models.analysis import FeatureMetrics, PersonalitySnapshot
 from app.report_generator.report import generate_report
 from app.services.report_store import save_report
@@ -12,19 +9,9 @@ router = APIRouter()
 
 
 @router.get("/download")
-def download_report(db: Session = Depends(get_db), user=Depends(get_current_user)):
-    metrics = (
-        db.query(FeatureMetrics)
-        .filter(FeatureMetrics.user_id == user.id)
-        .order_by(FeatureMetrics.computed_at.desc())
-        .first()
-    )
-    snapshot = (
-        db.query(PersonalitySnapshot)
-        .filter(PersonalitySnapshot.user_id == user.id)
-        .order_by(PersonalitySnapshot.created_at.desc())
-        .first()
-    )
+def download_report(user=Depends(get_current_user)):
+    metrics = FeatureMetrics.objects(user=user).order_by("-computed_at").first()
+    snapshot = PersonalitySnapshot.objects(user=user).order_by("-created_at").first()
     if not metrics or not snapshot:
         raise HTTPException(status_code=404, detail="No analysis data available")
     metrics_data = {

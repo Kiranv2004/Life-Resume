@@ -1,24 +1,26 @@
 from typing import List
-import lizard
 
-from app.github_ingestion.client import GitHubClient
+# Complexity is estimated purely from the diff data already present in the commit
+# detail response — no extra API calls needed.
+
+_CODE_EXTS = {".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".go",
+              ".c", ".cpp", ".cs", ".rb", ".rs", ".php", ".swift", ".kt"}
 
 
-def compute_commit_complexity(client: GitHubClient, full_name: str, sha: str, files: List[dict]) -> float:
-    complexities = []
-    for file_info in files:
-        filename = file_info.get("filename", "")
-        if not filename:
+def compute_commit_complexity(client, full_name: str, sha: str, files: List[dict]) -> float:
+    """Estimate complexity from patch size without any extra API calls."""
+    scores = []
+    for f in files:
+        filename = f.get("filename", "")
+        ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+        if ext not in _CODE_EXTS:
             continue
-        content = client.get_file_content(full_name, filename, sha)
-        if not content:
-            continue
-        try:
-            analysis = lizard.analyze_file.analyze_source_code(filename, content)
-            for func in analysis.function_list:
-                complexities.append(func.cyclomatic_complexity)
-        except Exception:
-            continue
-    if not complexities:
-        return 0.0
-    return sum(complexities) / len(complexities)
+        changes = f.get("changes", 0) or 0
+        patch = f.get("patch", "") or ""
+        # Count control-flow keywords in the patch as a complexity proxy
+        keywords = sum(patch.count(kw) for kw in
+                       ("if ", "elif ", "else:", "for ", "while ", "catch",
+                        "switch", "case ", "&&", "||", "?"))
+        score = min(10.0, (keywords * 0.5) + (changes * 0.01))
+        scores.append(score)
+    return round(sum(scores) / len(scores), 4) if scores else 0.0

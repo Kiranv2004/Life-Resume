@@ -1,16 +1,19 @@
 import requests
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from pydantic import BaseModel
 
 from app.auth.dependencies import get_current_user
 from app.core.config import settings
-from app.core.database import get_db
 from app.github_ingestion.client import GitHubClient
 from app.models.github import GitHubAccount
 from app.schemas.github import GitHubConnectResponse, GitHubConnectedOut
 from app.worker.tasks import run_analysis
 
 router = APIRouter()
+
+
+class PATConnectRequest(BaseModel):
+    token: str
 
 
 @router.get("/authorize", response_model=GitHubConnectResponse)
@@ -24,38 +27,57 @@ def authorize():
     return GitHubConnectResponse(authorization_url=url)
 
 
+@router.post("/connect-pat")
+def connect_pat(body: PATConnectRequest, user=Depends(get_current_user)):
+    """Connect GitHub using a Personal Access Token."""
+    client = GitHubClient(body.token)
+    try:
+        gh_user = client.get_user()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid GitHub token — check it has 'repo' scope")
+
+    account = GitHubAccount.objects(user=user).first()
+    if not account:
+        account = GitHubAccount(user=user, github_login=gh_user["login"], access_token=body.token)
+    else:
+        account.github_login = gh_user["login"]
+        account.access_token = body.token
+    account.save()
+    return {"connected": True, "github_login": gh_user["login"]}
+
+
 @router.post("/callback")
-def callback(code: str, db: Session = Depends(get_db), user=Depends(get_current_user)):
+def callback(code: str, user=Depends(get_current_user)):
     token = exchange_code_for_token(code)
     client = GitHubClient(token)
     gh_user = client.get_user()
 
-    account = db.query(GitHubAccount).filter(GitHubAccount.user_id == user.id).first()
+    account = GitHubAccount.objects(user=user).first()
     if not account:
-        account = GitHubAccount(user_id=user.id, github_login=gh_user["login"], access_token=token)
-        db.add(account)
+        account = GitHubAccount(user=user, github_login=gh_user["login"], access_token=token)
     else:
         account.github_login = gh_user["login"]
         account.access_token = token
-    db.commit()
+    account.save()
     return {"connected": True, "github_login": gh_user["login"]}
 
 
 @router.get("/status", response_model=GitHubConnectedOut)
-def status(db: Session = Depends(get_db), user=Depends(get_current_user)):
-    account = db.query(GitHubAccount).filter(GitHubAccount.user_id == user.id).first()
+def status(user=Depends(get_current_user)):
+    account = GitHubAccount.objects(user=user).first()
     if not account:
         return GitHubConnectedOut(connected=False)
     return GitHubConnectedOut(connected=True, github_login=account.github_login)
 
 
 @router.post("/start-analysis")
-def start_analysis(db: Session = Depends(get_db), user=Depends(get_current_user)):
-    account = db.query(GitHubAccount).filter(GitHubAccount.user_id == user.id).first()
+def start_analysis(user=Depends(get_current_user)):
+    account = GitHubAccount.objects(user=user).first()
     if not account:
         raise HTTPException(status_code=400, detail="GitHub account not connected")
-    task = run_analysis.delay(user.id)
-    return {"task_id": task.id}
+    from app.worker.tasks import run_analysis_background
+    run_analysis_background(str(user.id))
+    return {"status": "started"}
 
 
 def exchange_code_for_token(code: str) -> str:

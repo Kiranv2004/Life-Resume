@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseModel
 
 
@@ -7,4 +8,4 @@ class GitHubConnectResponse(BaseModel):
 
 class GitHubConnectedOut(BaseModel):
     connected: bool
-    github_login: str | None = None
+    github_login: Optional[str] = None

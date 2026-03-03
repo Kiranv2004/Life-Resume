@@ -1,88 +1,60 @@
-from sqlalchemy import Column, Integer, String, DateTime, Float, ForeignKey
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
+from datetime import datetime
+from mongoengine import (
+    Document,
+    StringField,
+    DateTimeField,
+    IntField,
+    FloatField,
+    ReferenceField,
+)
 
-from app.core.database import Base
-
-
-class GitHubAccount(Base):
-    __tablename__ = "github_accounts"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    github_login = Column(String, nullable=False)
-    access_token = Column(String, nullable=False)
-    connected_at = Column(DateTime, server_default=func.now())
-
-    user = relationship("User", back_populates="github_account")
-    repos = relationship("GitHubRepo", back_populates="account")
+from app.models.user import User
 
 
-class GitHubRepo(Base):
-    __tablename__ = "github_repos"
-
-    id = Column(Integer, primary_key=True, index=True)
-    account_id = Column(Integer, ForeignKey("github_accounts.id"), nullable=False)
-    repo_id = Column(Integer, nullable=False)
-    name = Column(String, nullable=False)
-    full_name = Column(String, nullable=False)
-    primary_language = Column(String)
-    created_at = Column(DateTime)
-    updated_at = Column(DateTime)
-
-    account = relationship("GitHubAccount", back_populates="repos")
-    commits = relationship("Commit", back_populates="repo")
-    pull_requests = relationship("PullRequest", back_populates="repo")
-    issues = relationship("Issue", back_populates="repo")
+class GitHubAccount(Document):
+    user = ReferenceField(User, required=True)
+    github_login = StringField(required=True)
+    access_token = StringField(required=True)
+    connected_at = DateTimeField(default=datetime.utcnow)
 
 
-class Commit(Base):
-    __tablename__ = "commits"
-
-    id = Column(Integer, primary_key=True, index=True)
-    repo_id = Column(Integer, ForeignKey("github_repos.id"), nullable=False)
-    sha = Column(String, nullable=False)
-    author_date = Column(DateTime, nullable=False)
-    additions = Column(Integer, nullable=False)
-    deletions = Column(Integer, nullable=False)
-    total_changes = Column(Integer, nullable=False)
-    message = Column(String)
-    complexity_score = Column(Float, default=0.0)
-
-    repo = relationship("GitHubRepo", back_populates="commits")
+class GitHubRepo(Document):
+    account = ReferenceField(GitHubAccount, required=True)
+    repo_id = IntField(required=True)
+    name = StringField(required=True)
+    full_name = StringField(required=True)
+    primary_language = StringField()
+    created_at = DateTimeField()
+    updated_at = DateTimeField()
 
 
-class PullRequest(Base):
-    __tablename__ = "pull_requests"
-
-    id = Column(Integer, primary_key=True, index=True)
-    repo_id = Column(Integer, ForeignKey("github_repos.id"), nullable=False)
-    pr_id = Column(Integer, nullable=False)
-    created_at = Column(DateTime, nullable=False)
-    merged_at = Column(DateTime)
-
-    repo = relationship("GitHubRepo", back_populates="pull_requests")
-
-
-class Issue(Base):
-    __tablename__ = "issues"
-
-    id = Column(Integer, primary_key=True, index=True)
-    repo_id = Column(Integer, ForeignKey("github_repos.id"), nullable=False)
-    issue_id = Column(Integer, nullable=False)
-    created_at = Column(DateTime, nullable=False)
-    closed_at = Column(DateTime)
-    reopened = Column(Integer, default=0)
-
-    repo = relationship("GitHubRepo", back_populates="issues")
+class Commit(Document):
+    repo = ReferenceField(GitHubRepo, required=True)
+    sha = StringField(required=True)
+    author_date = DateTimeField(required=True)
+    additions = IntField(required=True)
+    deletions = IntField(required=True)
+    total_changes = IntField(required=True)
+    message = StringField()
+    complexity_score = FloatField(default=0.0)
 
 
-class ReviewComment(Base):
-    __tablename__ = "review_comments"
+class PullRequest(Document):
+    repo = ReferenceField(GitHubRepo, required=True)
+    pr_id = IntField(required=True)
+    created_at = DateTimeField(required=True)
+    merged_at = DateTimeField()
 
-    id = Column(Integer, primary_key=True, index=True)
-    repo_id = Column(Integer, ForeignKey("github_repos.id"), nullable=False)
-    comment_id = Column(Integer, nullable=False)
-    created_at = Column(DateTime, nullable=False)
 
-    repo = relationship("GitHubRepo")
+class Issue(Document):
+    repo = ReferenceField(GitHubRepo, required=True)
+    issue_id = IntField(required=True)
+    created_at = DateTimeField(required=True)
+    closed_at = DateTimeField()
+    reopened = IntField(default=0)
+
+
+class ReviewComment(Document):
+    repo = ReferenceField(GitHubRepo, required=True)
+    comment_id = IntField(required=True)
+    created_at = DateTimeField(required=True)

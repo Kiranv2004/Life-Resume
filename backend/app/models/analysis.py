@@ -1,53 +1,87 @@
-from sqlalchemy import Column, Integer, Float, DateTime, ForeignKey, String
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
+from datetime import datetime
+from mongoengine import (
+    Document,
+    DictField,
+    FloatField,
+    IntField,
+    DateTimeField,
+    StringField,
+    ReferenceField,
+)
 
-from app.core.database import Base
-
-
-class FeatureMetrics(Base):
-    __tablename__ = "feature_metrics"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    commit_consistency = Column(Float, nullable=False)
-    focus_depth = Column(Float, nullable=False)
-    collaboration_index = Column(Float, nullable=False)
-    experimentation_index = Column(Float, nullable=False)
-    persistence_index = Column(Float, nullable=False)
-    complexity_handling = Column(Float, nullable=False)
-    computed_at = Column(DateTime, server_default=func.now())
-
-    user = relationship("User", back_populates="feature_metrics")
+from app.models.user import User
 
 
-class PersonalitySnapshot(Base):
-    __tablename__ = "personality_snapshots"
+# ── Event-Driven Behavioral Storage ──────────────────────────────────────────
+class BehaviorEvent(Document):
+    """Raw behavioral event stream. Never aggregated away — always queryable."""
+    user       = ReferenceField(User, required=True)
+    event_type = StringField(required=True)   # commit | pull_request | issue | review_comment
+    timestamp  = DateTimeField(required=True)
+    metadata   = DictField(default=dict)
 
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    analytical = Column(Float, nullable=False)
-    creativity = Column(Float, nullable=False)
-    discipline = Column(Float, nullable=False)
-    collaboration = Column(Float, nullable=False)
-    adaptability = Column(Float, nullable=False)
-    learning_velocity = Column(Float, nullable=False)
-    risk_appetite = Column(Float, nullable=False)
-    stress_stability = Column(Float, nullable=False)
-    created_at = Column(DateTime, server_default=func.now())
-
-    user = relationship("User", back_populates="personality_snapshots")
+    meta = {
+        "collection": "events",
+        "indexes": ["user", "event_type", "-timestamp"],
+    }
 
 
-class AnalysisJob(Base):
-    __tablename__ = "analysis_jobs"
+# ── Derived Feature Layer ─────────────────────────────────────────────────────
+class FeatureMetrics(Document):
+    user                  = ReferenceField(User, required=True)
+    commit_consistency    = FloatField(required=True)
+    focus_depth           = FloatField(required=True)
+    collaboration_index   = FloatField(required=True)
+    experimentation_index = FloatField(required=True)
+    persistence_index     = FloatField(required=True)
+    complexity_handling   = FloatField(required=True)
+    # Extended context signals
+    total_commits         = IntField(default=0)
+    total_repos           = IntField(default=0)
+    night_commit_ratio    = FloatField(default=0.0)
+    avg_commit_hour       = FloatField(default=12.0)
+    burst_session_count   = IntField(default=0)
+    # Enriched signals
+    language_diversity    = FloatField(default=0.0)
+    pr_merge_ratio        = FloatField(default=0.0)
+    avg_files_per_commit  = FloatField(default=0.0)
+    code_churn_ratio      = FloatField(default=0.0)
+    active_days_ratio     = FloatField(default=0.0)
+    computed_at           = DateTimeField(default=datetime.utcnow)
 
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    status = Column(String, nullable=False, default="queued")
-    progress = Column(Integer, default=0)
-    message = Column(String, default="")
-    created_at = Column(DateTime, server_default=func.now())
-    finished_at = Column(DateTime)
 
-    user = relationship("User", back_populates="analysis_jobs")
+# ── Personality + Intelligence Layer ─────────────────────────────────────────
+class PersonalitySnapshot(Document):
+    user               = ReferenceField(User, required=True)
+    week               = StringField()           # ISO week e.g. "2026-W09"
+    # Core traits (0-100)
+    analytical         = FloatField(required=True)
+    creativity         = FloatField(required=True)
+    discipline         = FloatField(required=True)
+    collaboration      = FloatField(required=True)
+    adaptability       = FloatField(required=True)
+    learning_velocity  = FloatField(required=True)
+    risk_appetite      = FloatField(required=True)
+    stress_stability   = FloatField(required=True)
+    # Interpretability layer
+    reasoning          = DictField(default=dict)   # trait → human-readable reason
+    # Role prediction
+    predicted_role     = StringField(default="")
+    role_reason        = StringField(default="")
+    role_confidence    = FloatField(default=0.0)
+    # Work style
+    work_style         = StringField(default="")
+    work_style_detail  = StringField(default="")
+    created_at         = DateTimeField(default=datetime.utcnow)
+
+
+# ── Job Tracking ──────────────────────────────────────────────────────────────
+class AnalysisJob(Document):
+    user        = ReferenceField(User, required=True)
+    status      = StringField(required=True, default="queued")
+    progress    = IntField(default=0)
+    message     = StringField(default="")
+    logs        = StringField(default="")
+    created_at  = DateTimeField(default=datetime.utcnow)
+    finished_at = DateTimeField()
+

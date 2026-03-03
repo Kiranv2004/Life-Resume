@@ -1,16 +1,15 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from mongoengine import connect, disconnect
+from mongoengine.connection import ConnectionFailure, get_connection
 
 from app.core.config import settings
 
-engine = create_engine(settings.database_url, pool_pre_ping=True)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
 
-
-def get_db():
-    db = SessionLocal()
+def init_db() -> None:
     try:
-        yield db
-    finally:
-        db.close()
+        get_connection()
+    except ConnectionFailure:
+        connect(host=settings.mongodb_uri)
+
+
+def close_db() -> None:
+    disconnect()
