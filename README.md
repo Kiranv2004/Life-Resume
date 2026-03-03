@@ -3,10 +3,10 @@
 Life Resume analyzes GitHub behavioral signals and builds a personality intelligence profile. It combines data ingestion, feature engineering, personality inference, and a dashboard with a downloadable PDF report.
 
 ## Tech Stack
-- Backend: FastAPI, SQLAlchemy, Celery, Redis
+- Backend: FastAPI, MongoEngine, Celery (eager mode)
 - ML: scikit-learn, pandas, numpy, lizard
 - Frontend: React (Vite), Recharts
-- Database: PostgreSQL
+- Database: MongoDB
 - Auth: JWT + GitHub OAuth
 
 ## Setup
